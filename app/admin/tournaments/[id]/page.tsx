@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 
 type ApiUser = { _id: string; name: string; username: string; role: string };
 type ApiMatch = {
@@ -12,11 +13,15 @@ type ApiMatch = {
   bettingOpen: boolean;
   result?: "A" | "draw" | "B" | null;
   odds: { A: number | null; draw: number | null; B: number | null };
+  cutoffTime: string | null;
 };
 type ApiTournament = {
   _id: string;
   name: string;
   status: string;
+  startDate: string;
+  endDate: string;
+  bettingCutoffHours: number;
   participantIds: ApiUser[];
 };
 
@@ -102,6 +107,24 @@ export default function AdminTournamentDetailPage() {
     await loadAll();
   }
 
+  async function removeParticipant(userId: string, name: string) {
+    if (!confirm(`Remove ${name} from this tournament? They stay a valid user — just no longer in this tournament.`)) return;
+
+    await fetch(`/api/tournaments/${tournamentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ removeParticipantId: userId }),
+    });
+    await loadAll();
+  }
+
+  async function deleteMatch(matchId: string, teamA: string, teamB: string) {
+    if (!confirm(`Permanently delete ${teamA} vs ${teamB}? This also deletes all bets and penalties tied to it.`)) return;
+
+    await fetch(`/api/matches/${matchId}`, { method: "DELETE" });
+    await loadAll();
+  }
+
   if (loading || !tournament) return <p className="text-gray-400">Loading…</p>;
 
   const participantIds = tournament.participantIds.map((p) => p._id);
@@ -113,6 +136,13 @@ export default function AdminTournamentDetailPage() {
     <div>
       <div className="mb-1 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold text-white">{tournament.name}</h1>
+
+        <Link
+          href={`/tournaments/${tournamentId}/leaderboard`}
+          className="rounded-full border border-blue-700 px-3 py-1 text-xs font-medium text-blue-400 hover:bg-blue-500/10"
+        >
+          View Leaderboard →
+        </Link>
 
         <select
           value={tournament.status}
@@ -135,6 +165,10 @@ export default function AdminTournamentDetailPage() {
         {matches.length} match{matches.length === 1 ? "" : "es"} ·{" "}
         {tournament.participantIds.length} participant
         {tournament.participantIds.length === 1 ? "" : "s"}
+        <br />
+        {new Date(tournament.startDate).toLocaleDateString()} –{" "}
+        {new Date(tournament.endDate).toLocaleDateString()} · Betting cutoff:{" "}
+        {tournament.bettingCutoffHours}h before kickoff
       </p>
 
       {/* Add match — no odds inputs anymore, odds are computed live from real bets */}
@@ -191,6 +225,24 @@ export default function AdminTournamentDetailPage() {
                 Odds {m.odds.A ?? "—"} / {m.odds.draw ?? "—"} / {m.odds.B ?? "—"} ·{" "}
                 {new Date(m.kickoff).toLocaleString()}
               </p>
+              {m.cutoffTime && (
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Auto-closes: {new Date(m.cutoffTime).toLocaleString()}
+                </p>
+              )}
+              <Link
+                href={`/tournaments/${tournamentId}/matches/${m._id}`}
+                className="mt-1 inline-block text-xs text-blue-400 hover:underline"
+              >
+                View full bet ledger →
+              </Link>
+              <br />
+              <Link
+                href={`/admin/matches/${m._id}/sidebets`}
+                className="mt-1 inline-block text-xs text-purple-400 hover:underline"
+              >
+                Manage side bets →
+              </Link>
             </div>
 
             <button
@@ -203,6 +255,13 @@ export default function AdminTournamentDetailPage() {
             >
               <span className={`h-2 w-2 rounded-full ${m.bettingOpen ? "bg-black" : "bg-gray-400"}`} />
               Betting {m.bettingOpen ? "Open" : "Closed"}
+            </button>
+
+            <button
+              onClick={() => deleteMatch(m._id, m.teamA, m.teamB)}
+              className="rounded-lg border border-red-800 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10"
+            >
+              Delete match
             </button>
 
             {!m.bettingOpen && (
@@ -251,8 +310,18 @@ export default function AdminTournamentDetailPage() {
         {tournament.participantIds.length > 0 && (
           <ul className="mb-4 flex flex-wrap gap-2">
             {tournament.participantIds.map((p) => (
-              <li key={p._id} className="rounded-full bg-green-500/20 px-3 py-1 text-xs text-green-400">
+              <li
+                key={p._id}
+                className="flex items-center gap-2 rounded-full bg-green-500/20 py-1 pl-3 pr-1.5 text-xs text-green-400"
+              >
                 {p.name}
+                <button
+                  onClick={() => removeParticipant(p._id, p.name)}
+                  className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-green-500/30"
+                  title={`Remove ${p.name}`}
+                >
+                  ×
+                </button>
               </li>
             ))}
           </ul>

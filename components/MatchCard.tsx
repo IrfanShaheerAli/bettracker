@@ -12,6 +12,9 @@ type MatchCardProps = {
   onBet: (choice: "A" | "draw" | "B", stake: number) => void;
 };
 
+const MIN_STAKE = 20;
+const STAKE_STEP = 5;
+
 export default function MatchCard({
   teamA,
   teamB,
@@ -23,6 +26,7 @@ export default function MatchCard({
 }: MatchCardProps) {
   const [pendingChoice, setPendingChoice] = useState<"A" | "draw" | "B" | undefined>(undefined);
   const [stake, setStake] = useState("");
+  const [error, setError] = useState("");
 
   const options: { key: "A" | "draw" | "B"; label: string; odds: number | null }[] = [
     { key: "A", label: teamA, odds: odds.A },
@@ -32,10 +36,28 @@ export default function MatchCard({
 
   const isConfirmed = !!userChoice;
   const stakeNum = Number(stake);
-  const canConfirm = !!pendingChoice && stakeNum > 0;
 
   function handleConfirm() {
-    if (pendingChoice && stakeNum > 0) onBet(pendingChoice, stakeNum);
+    setError("");
+
+    if (!pendingChoice) {
+      setError("Pick a side first.");
+      return;
+    }
+    if (!stake || stakeNum <= 0) {
+      setError("Enter a stake amount.");
+      return;
+    }
+    if (stakeNum < MIN_STAKE) {
+      setError(`Minimum stake is ₹${MIN_STAKE}.`);
+      return;
+    }
+    if (stakeNum % STAKE_STEP !== 0) {
+      setError(`Stake must be in multiples of ₹${STAKE_STEP}.`);
+      return;
+    }
+
+    onBet(pendingChoice, stakeNum);
   }
 
   return (
@@ -63,7 +85,10 @@ export default function MatchCard({
             <button
               key={opt.key}
               disabled={!bettingOpen || isConfirmed}
-              onClick={() => setPendingChoice(opt.key)}
+              onClick={() => {
+                setPendingChoice(opt.key);
+                setError("");
+              }}
               className={`rounded-xl border p-3 text-center transition ${
                 isLockedIn
                   ? "border-green-400 bg-green-500/20"
@@ -84,26 +109,31 @@ export default function MatchCard({
           ✓ Bet confirmed on {options.find((o) => o.key === userChoice)?.label}
         </p>
       ) : bettingOpen ? (
-        <div className="mt-4 flex gap-2">
-          <input
-            type="number"
-            min={1}
-            placeholder="Stake ₹"
-            value={stake}
-            onChange={(e) => setStake(e.target.value)}
-            className="w-24 rounded-lg border border-green-700 bg-transparent p-2.5 text-sm text-white outline-none focus:border-green-400"
-          />
-          <button
-            onClick={handleConfirm}
-            disabled={!canConfirm}
-            className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition ${
-              canConfirm
-                ? "bg-green-500 text-black hover:bg-green-400"
-                : "cursor-not-allowed bg-gray-700 text-gray-400"
-            }`}
-          >
-            Confirm Bet
-          </button>
+        <div className="mt-4">
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min={MIN_STAKE}
+              step={STAKE_STEP}
+              placeholder={`Stake ₹ (min ${MIN_STAKE})`}
+              value={stake}
+              onChange={(e) => {
+                setStake(e.target.value);
+                setError("");
+              }}
+              className="w-32 rounded-lg border border-green-700 bg-transparent p-2.5 text-sm text-white outline-none focus:border-green-400"
+            />
+            <button
+              onClick={handleConfirm}
+              className="flex-1 rounded-lg bg-green-500 py-2.5 text-sm font-semibold text-black transition hover:bg-green-400"
+            >
+              Confirm Bet
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] text-gray-500">
+            Min ₹{MIN_STAKE}, multiples of ₹{STAKE_STEP}
+          </p>
+          {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
         </div>
       ) : (
         <p className="mt-3 text-xs text-gray-500">Betting is closed for this match.</p>

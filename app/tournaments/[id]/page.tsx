@@ -15,7 +15,8 @@ type ApiMatch = {
   teamA: string;
   teamB: string;
   kickoff: string;
-  bettingOpen: boolean;
+  effectiveOpen: boolean;
+  result?: "A" | "draw" | "B" | null;
   odds: { A: number | null; draw: number | null; B: number | null };
 };
 type ApiBet = { _id: string; userId: { _id: string }; matchId: string; choice: "A" | "draw" | "B" };
@@ -31,6 +32,7 @@ export default function TournamentDetailPage() {
   const [matches, setMatches] = useState<ApiMatch[]>([]);
   const [myBets, setMyBets] = useState<Record<string, "A" | "draw" | "B">>({});
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"active" | "completed">("active");
 
   async function loadAll(currentUserId: string) {
     const tRes = await fetch(`/api/tournaments/${tournamentId}`);
@@ -77,13 +79,22 @@ export default function TournamentDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId: user.id, choice, stake }),
     });
-    if (res.ok) await loadAll(user.id);
+    if (res.ok) {
+      await loadAll(user.id);
+    } else {
+      const data = await res.json();
+      alert(data.error || "Could not place bet.");
+    }
   }
 
   if (!user || !tournament || loading) return null;
 
   const betCount = Object.keys(myBets).length;
   const allBetsPlaced = betCount === matches.length && matches.length > 0;
+
+  const completedMatches = matches.filter((m) => !!m.result);
+  const activeMatches = matches.filter((m) => !m.result);
+  const listToShow = view === "active" ? activeMatches : completedMatches;
 
   return (
     <>
@@ -97,12 +108,20 @@ export default function TournamentDetailPage() {
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#04140D]/70" />
 
         <div className="relative mx-auto max-w-5xl">
-          <h1 className="mb-1 text-2xl font-bold text-white">{tournament.name}</h1>
+          <div className="mb-1 flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">{tournament.name}</h1>
+            <Link
+              href={`/tournaments/${tournamentId}/leaderboard`}
+              className="text-xs text-green-400 hover:underline"
+            >
+              View Leaderboard →
+            </Link>
+          </div>
 
           <TournamentTabs tournamentId={tournamentId} />
 
           <div
-            className={`mb-8 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium ${
+            className={`mb-6 mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium ${
               allBetsPlaced ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
             }`}
           >
@@ -111,15 +130,39 @@ export default function TournamentDetailPage() {
               : `${betCount} / ${matches.length} matches bet on — bet on all of them or you'll be penalized`}
           </div>
 
+          {/* Sub-toggle: Recent & Upcoming (default) vs Completed */}
+          <div className="mb-6 flex gap-2">
+            <button
+              onClick={() => setView("active")}
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+                view === "active"
+                  ? "bg-green-500 text-black"
+                  : "border border-green-800 text-gray-400 hover:text-white"
+              }`}
+            >
+              Recent & Upcoming ({activeMatches.length})
+            </button>
+            <button
+              onClick={() => setView("completed")}
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+                view === "completed"
+                  ? "bg-green-500 text-black"
+                  : "border border-green-800 text-gray-400 hover:text-white"
+              }`}
+            >
+              Completed ({completedMatches.length})
+            </button>
+          </div>
+
           <div className="grid gap-5 sm:grid-cols-2">
-            {matches.map((m) => (
+            {listToShow.map((m) => (
               <div key={m._id}>
                 <MatchCard
                   teamA={m.teamA}
                   teamB={m.teamB}
                   date={new Date(m.kickoff).toLocaleString()}
                   odds={m.odds}
-                  bettingOpen={m.bettingOpen}
+                  bettingOpen={m.effectiveOpen}
                   userChoice={myBets[m._id]}
                   onBet={(choice, stake) => handleBet(m._id, choice, stake)}
                 />
@@ -129,13 +172,22 @@ export default function TournamentDetailPage() {
                 >
                   View full bet ledger →
                 </Link>
+                <br />
+                <Link
+                  href={`/tournaments/${tournamentId}/matches/${m._id}/sidebets`}
+                  className="mt-1 inline-block text-xs text-purple-400 hover:underline"
+                >
+                  Side Bets →
+                </Link>
               </div>
             ))}
-          </div>
 
-          {matches.length === 0 && (
-            <p className="text-sm text-gray-500">No matches added to this tournament yet.</p>
-          )}
+            {listToShow.length === 0 && (
+              <p className="text-sm text-gray-500">
+                {view === "active" ? "No recent or upcoming matches." : "No completed matches yet."}
+              </p>
+            )}
+          </div>
         </div>
       </main>
 

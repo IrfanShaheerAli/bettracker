@@ -15,6 +15,7 @@ type ApiMatch = {
   result?: "A" | "draw" | "B" | null;
   odds: { A: number | null; draw: number | null; B: number | null };
   penalties: { userId: { _id: string; name: string }; amount: number }[];
+  cutoffTime: string | null;
 };
 type ApiBet = {
   _id: string;
@@ -55,6 +56,33 @@ export default function MatchLedgerPage() {
   }, [router, matchId]);
 
   if (!user || !match || loading) return null;
+
+  const isAdmin = user.role === "admin";
+  const cutoffPassed = match.cutoffTime ? new Date() >= new Date(match.cutoffTime) : false;
+
+  if (!isAdmin && !cutoffPassed) {
+    return (
+      <>
+        <Navbar />
+        <main
+          className="relative flex min-h-screen items-center justify-center bg-cover bg-center bg-fixed px-6"
+          style={{ backgroundImage: "url('/hero-stadium.png')" }}
+        >
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#04140D]/25 via-[#04140D]/80 to-[#04140D]/25" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#04140D]/70" />
+
+          <div className="relative rounded-2xl border border-green-900 bg-[#0E231B]/90 p-8 text-center backdrop-blur-sm">
+            <p className="text-lg font-semibold text-white">Ledger not available yet</p>
+            <p className="mt-2 max-w-sm text-sm text-gray-400">
+              This match&apos;s bet ledger unlocks once betting closes
+              {match.cutoffTime && ` (${new Date(match.cutoffTime).toLocaleString()})`}.
+            </p>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   const settled = !!match.result;
 

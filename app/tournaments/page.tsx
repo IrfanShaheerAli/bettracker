@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import { getSession } from "@/lib/session";
 import { User } from "@/types";
 
@@ -11,6 +12,8 @@ type ApiTournament = {
   _id: string;
   name: string;
   status: string;
+  startDate: string;
+  endDate: string;
   participantIds: { _id: string }[];
 };
 
@@ -134,6 +137,8 @@ export default function TournamentsPage() {
             <div className="space-y-4">
               {tournaments.map((t) => {
                 const joined = t.participantIds.some((p) => p._id === user.id);
+                const hasStarted = new Date() >= new Date(t.startDate);
+
                 return (
                   <div
                     key={t._id}
@@ -146,10 +151,18 @@ export default function TournamentsPage() {
                         {t.participantIds.length} participant{t.participantIds.length === 1 ? "" : "s"} ·{" "}
                         <span className="capitalize">{t.status}</span>
                       </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {new Date(t.startDate).toLocaleDateString()} –{" "}
+                        {new Date(t.endDate).toLocaleDateString()}
+                      </p>
                     </div>
 
                     <div className="flex gap-2">
-                      {joined ? (
+                      {!hasStarted ? (
+                        <span className="rounded-full bg-yellow-500/20 px-4 py-2 text-xs font-semibold text-yellow-400">
+                          Upcoming — starts {new Date(t.startDate).toLocaleDateString()}
+                        </span>
+                      ) : joined ? (
                         <Link
                           href={`/tournaments/${t._id}`}
                           className="rounded-lg bg-green-500 px-5 py-2.5 text-sm font-semibold text-black hover:bg-green-400"
@@ -176,6 +189,8 @@ export default function TournamentsPage() {
           </div>
         </div>
       </main>
+
+      <Footer />
     </>
   );
 }

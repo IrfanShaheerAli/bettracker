@@ -49,6 +49,13 @@ export default function AdminUsersPage() {
     await loadUsers();
   }
 
+  async function handleDelete(userId: string, name: string) {
+    if (!confirm(`Permanently delete ${name}'s account? This also removes them from every tournament and deletes their bet history.`)) return;
+
+    await fetch(`/api/users/${userId}`, { method: "DELETE" });
+    await loadUsers();
+  }
+
   const participants = users.filter((u) => u.role === "participant");
 
   if (loading) return <p className="text-gray-400">Loading users…</p>;
@@ -92,7 +99,7 @@ export default function AdminUsersPage() {
               type="text"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="temporary password"
+              placeholder="password"
               className="w-full rounded-lg border border-green-700 bg-transparent p-2.5 text-sm text-white outline-none focus:border-green-400"
             />
           </div>
@@ -123,6 +130,12 @@ export default function AdminUsersPage() {
                 <p className="text-sm text-white">{u.name}</p>
                 <p className="text-xs text-gray-500">@{u.username}</p>
               </div>
+              <button
+                onClick={() => handleDelete(u._id, u.name)}
+                className="rounded-lg border border-red-800 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10"
+              >
+                Delete
+              </button>
             </div>
           ))}
 
