@@ -114,11 +114,17 @@ export default function MatchLedgerPage() {
       <Navbar />
 
       <main
-        className="relative min-h-screen bg-cover bg-center bg-fixed px-6 py-10"
-        style={{ backgroundImage: "url('/hero-stadium.png')" }}
+        className={`relative min-h-screen px-6 py-10 ${
+          isAdmin ? "bg-[#071A12]" : "bg-cover bg-center bg-fixed"
+        }`}
+        style={isAdmin ? undefined : { backgroundImage: "url('/hero-stadium.png')" }}
       >
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#04140D]/25 via-[#04140D]/80 to-[#04140D]/25" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#04140D]/70" />
+        {!isAdmin && (
+          <>
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#04140D]/25 via-[#04140D]/80 to-[#04140D]/25" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#04140D]/70" />
+          </>
+        )}
 
         <div className="relative mx-auto max-w-4xl">
           <h1 className="mb-1 text-2xl font-bold text-white">

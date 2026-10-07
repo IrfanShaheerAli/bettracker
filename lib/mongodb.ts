@@ -1,5 +1,20 @@
 import mongoose from "mongoose";
 
+// Importing every model here (even unused in this file) guarantees Mongoose
+// registers all schemas the moment the database connects — regardless of
+// which API route happens to run first on a cold serverless instance.
+// Without this, a route that only imports Tournament but calls
+// .populate("participantIds", ...) can intermittently throw
+// "MissingSchemaError: Schema hasn't been registered for model User"
+// if it's the very first route to run in a fresh instance.
+import "@/models/User";
+import "@/models/Tournament";
+import "@/models/Match";
+import "@/models/Bet";
+import "@/models/Penalty";
+import "@/models/SideBet";
+import "@/models/SideBetAnswer";
+
 const MONGODB_URI = process.env.MONGODB_URI as string;
 
 if (!MONGODB_URI) {

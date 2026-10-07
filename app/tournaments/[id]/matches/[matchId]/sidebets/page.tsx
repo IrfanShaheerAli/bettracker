@@ -113,8 +113,20 @@ export default function ParticipantSideBetsPage() {
     <>
       <Navbar />
 
-      <main className="min-h-screen bg-[#071A12] px-6 py-10">
-        <div className="mx-auto max-w-5xl">
+      <main
+        className={`relative min-h-screen px-6 py-10 ${
+          isAdmin ? "bg-[#071A12]" : "bg-cover bg-center bg-fixed"
+        }`}
+        style={isAdmin ? undefined : { backgroundImage: "url('/hero-stadium.png')" }}
+      >
+        {!isAdmin && (
+          <>
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#04140D]/25 via-[#04140D]/80 to-[#04140D]/25" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#04140D]/70" />
+          </>
+        )}
+
+        <div className="relative mx-auto max-w-5xl">
           <h1 className="mb-1 text-2xl font-bold text-white">Side Bets</h1>
           <p className="mb-8 text-sm text-gray-400">
             Extra prediction questions for this match.
