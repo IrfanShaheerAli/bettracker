@@ -134,7 +134,15 @@ export default function ParticipantSideBetsPage() {
 
           {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
 
-          {canSeeTable ? (
+          {canSeeTable && sideBets.length === 0 ? (
+            // After the match ends and the admin never added any side bets
+            <div className="rounded-2xl border border-green-900 bg-[#0E231B]/90 p-8 text-center backdrop-blur-sm">
+              <p className="text-lg font-semibold text-white">No side bets for this match</p>
+              <p className="mt-2 text-sm text-gray-400">
+                No sidebets were added by the admin for this match.
+              </p>
+            </div>
+          ) : canSeeTable ? (
             // After the deadline (or for admin): the full combined table, same as the match ledger
             <div className="overflow-x-auto rounded-2xl border border-green-900 bg-[#0E231B]">
               <table className="w-full min-w-[700px] text-sm">
@@ -208,12 +216,6 @@ export default function ParticipantSideBetsPage() {
                       </td>
                     </tr>
                   ))}
-
-                  {sideBets.length === 0 && (
-                    <tr>
-                      <td className="px-4 py-6 text-center text-gray-500">No side bets on this match.</td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
@@ -253,7 +255,9 @@ export default function ParticipantSideBetsPage() {
               })}
 
               {sideBets.length === 0 && (
-                <p className="text-sm text-gray-500">No side bets on this match.</p>
+                <p className="text-sm text-gray-500">
+                  No sidebets have been added by the admin for this match.
+                </p>
               )}
 
               <p className="text-xs text-gray-500">

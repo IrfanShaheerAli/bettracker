@@ -10,10 +10,18 @@ import { User } from "@/types";
 type ApiParticipant = { _id: string; name: string };
 type ApiTournament = { _id: string; name: string; participantIds: ApiParticipant[] };
 type ApiMatch = { _id: string; teamA: string; teamB: string; result?: "A" | "draw" | "B" | null };
-type ApiBet = { userId: { _id: string }; choice: "A" | "draw" | "B"; dividend: number | null };
+type ApiBet = {
+  userId: { _id: string };
+  choice: "A" | "draw" | "B";
+  stake: number;
+  dividend: number | null;
+};
 type ApiPenalty = { userId: { _id: string }; amount: number };
 
-type Cell = { kind: "none" | "pending" | "penalty" | "settled"; value?: number };
+// value is always the NET profit/loss — used for ranking totals.
+// stake is kept alongside it only so the display can show the full payout
+// (stake + profit) for a win, without changing what counts toward the total.
+type Cell = { kind: "none" | "pending" | "penalty" | "settled"; value?: number; stake?: number };
 
 export default function TournamentLeaderboardPage() {
   const params = useParams();
@@ -65,7 +73,7 @@ export default function TournamentLeaderboardPage() {
           for (const bet of bets) {
             const uid = bet.userId._id;
             if (bet.dividend !== null) {
-              newGrid[m._id][uid] = { kind: "settled", value: bet.dividend };
+              newGrid[m._id][uid] = { kind: "settled", value: bet.dividend, stake: bet.stake };
             } else {
               newGrid[m._id][uid] = { kind: "pending" };
             }
@@ -93,21 +101,18 @@ export default function TournamentLeaderboardPage() {
 
   const rows = tournament.participantIds.map((p) => {
     let total = 0;
-    let settledCount = 0;
-    let correctCount = 0;
+    let accuracy = 0; // number of matches this person predicted correctly
 
     for (const m of matches) {
       const cell = cellFor(m._id, p._id);
       if (cell.kind === "settled") {
         total += cell.value!;
-        settledCount++;
-        if (cell.value! > 0) correctCount++;
+        // a win has a net value of 0 or more; a loss is always -stake
+        if (cell.value! >= 0) accuracy++;
       } else if (cell.kind === "penalty") {
         total += cell.value!;
       }
     }
-
-    const accuracy = settledCount > 0 ? Math.round((correctCount / settledCount) * 100) : null;
 
     return { ...p, total, accuracy };
   });
@@ -118,8 +123,19 @@ export default function TournamentLeaderboardPage() {
   function renderCell(cell: Cell) {
     if (cell.kind === "none") return <span className="text-gray-700">–</span>;
     if (cell.kind === "pending") return <span className="text-gray-500">Pending</span>;
+
     const color = (cell.value ?? 0) >= 0 ? "text-green-400" : "text-red-400";
-    const label = cell.kind === "penalty" ? `${cell.value} (pen)` : `${cell.value! >= 0 ? "+" : ""}${cell.value}`;
+
+    if (cell.kind === "penalty") {
+      return <span className={color}>{cell.value} (pen)</span>;
+    }
+
+    // Winning bet: show the full payout (stake back + profit), not just the profit —
+    // matches what the person actually receives. A loss still shows the net -stake.
+    const isWin = (cell.value ?? 0) >= 0;
+    const displayValue = isWin && cell.stake !== undefined ? cell.stake + cell.value! : cell.value!;
+    const label = `${displayValue >= 0 ? "+" : ""}${displayValue.toFixed(2)}`;
+
     return <span className={color}>{label}</span>;
   }
 
@@ -183,7 +199,7 @@ export default function TournamentLeaderboardPage() {
                       {r.total.toFixed(2)}
                     </td>
                     <td className="px-3 py-3 text-right text-gray-300">
-                      {r.accuracy === null ? "–" : `${r.accuracy}%`}
+                      {r.accuracy}
                     </td>
                     <td
                       className={`px-3 py-3 text-right font-bold ${

@@ -86,16 +86,22 @@ export default function MatchLedgerPage() {
 
   const settled = !!match.result;
 
-  // Projected (pre-result) or real (post-settlement) dividend for a bet under one outcome.
+  // Projected (pre-result) or real (post-settlement) payout for a bet under one outcome.
+  // A win shows the TOTAL you'd actually receive (your stake back + profit) —
+  // not just the profit on its own, which was confusing to read at a glance.
+  // A loss still shows -stake, since that's the real net result: you get nothing back.
   function dividendIf(bet: ApiBet, outcome: "A" | "draw" | "B") {
     if (settled) {
-      // once settled, only the actual result column shows the real locked-in dividend
+      // once settled, only the actual result column shows the real locked-in number
       if (outcome !== match!.result) return null;
-      return bet.dividend ?? 0;
+      const netDividend = bet.dividend ?? 0;
+      return netDividend >= 0 ? Number((bet.stake + netDividend).toFixed(2)) : netDividend;
     }
     if (bet.choice === outcome) {
       const odds = match!.odds[outcome];
-      return odds !== null ? Number((bet.stake * odds).toFixed(2)) : 0;
+      if (odds === null) return 0;
+      const profit = bet.stake * odds;
+      return Number((bet.stake + profit).toFixed(2));
     }
     return -bet.stake;
   }

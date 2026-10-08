@@ -243,6 +243,7 @@ export default function AdminTournamentDetailPage() {
               >
                 Manage side bets →
               </Link>
+
             </div>
 
             <button

@@ -2,13 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 
-type ApiAnswer = {
-  _id: string;
-  userId: { _id: string; name: string };
-  answer: string;
-  dividend: number | null;
-};
 type ApiSideBet = {
   _id: string;
   label: string;
@@ -17,41 +12,20 @@ type ApiSideBet = {
   answerCount: number;
   pool: number;
 };
-type ApiParticipant = { _id: string; name: string };
-type ApiMatch = { tournamentId: string };
 
 export default function AdminSideBetsPage() {
   const params = useParams();
   const matchId = params.matchId as string;
 
   const [sideBets, setSideBets] = useState<ApiSideBet[]>([]);
-  const [answersByBet, setAnswersByBet] = useState<Record<string, ApiAnswer[]>>({});
-  const [participants, setParticipants] = useState<ApiParticipant[]>([]);
   const [label, setLabel] = useState("");
   const [stake, setStake] = useState("30");
   const [correctAnswerInputs, setCorrectAnswerInputs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   async function loadAll() {
-    const matchRes = await fetch(`/api/matches/${matchId}`);
-    const matchData: ApiMatch = await matchRes.json();
-
-    const tRes = await fetch(`/api/tournaments/${matchData.tournamentId}`);
-    const tData: { participantIds: ApiParticipant[] } = await tRes.json();
-    setParticipants(tData.participantIds);
-
     const res = await fetch(`/api/matches/${matchId}/sidebets`);
-    const data: ApiSideBet[] = await res.json();
-    setSideBets(data);
-
-    const answersMap: Record<string, ApiAnswer[]> = {};
-    await Promise.all(
-      data.map(async (sb) => {
-        const aRes = await fetch(`/api/sidebets/${sb._id}/answers`);
-        answersMap[sb._id] = await aRes.json();
-      })
-    );
-    setAnswersByBet(answersMap);
+    setSideBets(await res.json());
     setLoading(false);
   }
 
@@ -99,106 +73,21 @@ export default function AdminSideBetsPage() {
     return <main className="min-h-screen bg-[#071A12] p-8 text-gray-400">Loading…</main>;
   }
 
-  // Build a cell lookup: cellFor(sideBetId, userId) -> their answer + dividend, if any
-  function cellFor(sideBetId: string, userId: string) {
-    const answers = answersByBet[sideBetId] ?? [];
-    return answers.find((a) => a.userId._id === userId) ?? null;
-  }
-
-  // Each participant's running total across every side bet on this match
-  function totalFor(userId: string) {
-    let total = 0;
-    for (const sb of sideBets) {
-      const cell = cellFor(sb._id, userId);
-      if (cell && cell.dividend !== null) total += cell.dividend;
-    }
-    return total;
-  }
-
   return (
     <main className="min-h-screen bg-[#071A12] p-8">
-      <div className="mx-auto max-w-6xl">
-        <h1 className="mb-1 text-2xl font-bold text-white">Side Bets</h1>
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-1 flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold text-white">Manage Side Bets</h1>
+          <Link
+            href={`/admin/matches/${matchId}/sidebets/table`}
+            className="rounded-full border border-blue-700 px-3 py-1 text-xs font-medium text-blue-400 hover:bg-blue-500/10"
+          >
+            View Side Bets Table →
+          </Link>
+        </div>
         <p className="mb-8 text-sm text-gray-400">
-          Custom prediction questions for this match — HT score, top scorer, anything else.
+          Add questions, declare correct answers, or remove side bets for this match.
         </p>
-
-        {/* Combined ledger-style table across every side bet */}
-        {sideBets.length > 0 && (
-          <div className="mb-8 overflow-x-auto rounded-2xl border border-green-900 bg-[#0E231B]">
-            <table className="w-full min-w-[700px] text-sm">
-              <thead>
-                <tr className="border-b border-green-900 text-xs text-gray-400">
-                  <th className="sticky left-0 bg-[#0E231B] px-4 py-3 text-left">Punter</th>
-                  {sideBets.map((sb) => (
-                    <th key={sb._id} className="px-3 py-3 text-right" colSpan={2}>
-                      {sb.label}
-                      {sb.correctAnswer && (
-                        <span className="ml-1 rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] text-blue-400">
-                          {sb.correctAnswer}
-                        </span>
-                      )}
-                    </th>
-                  ))}
-                  <th className="px-3 py-3 text-right">Side Bets Total</th>
-                </tr>
-                <tr className="border-b border-green-900 text-[10px] text-gray-600">
-                  <th className="sticky left-0 bg-[#0E231B] px-4 py-1 text-left"></th>
-                  {sideBets.map((sb) => (
-                    <>
-                      <th key={`${sb._id}-ans`} className="px-3 py-1 text-right">Answer</th>
-                      <th key={`${sb._id}-pay`} className="px-3 py-1 text-right">Payout</th>
-                    </>
-                  ))}
-                  <th className="px-3 py-1"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {participants.map((p) => (
-                  <tr key={p._id} className="border-b border-green-900/50 last:border-b-0">
-                    <td className="sticky left-0 bg-[#0E231B] px-4 py-3 text-white">{p.name}</td>
-                    {sideBets.map((sb) => {
-                      const cell = cellFor(sb._id, p._id);
-                      return (
-                        <>
-                          <td key={`${sb._id}-${p._id}-ans`} className="px-3 py-3 text-right text-gray-300">
-                            {cell ? cell.answer : <span className="text-gray-700">–</span>}
-                          </td>
-                          <td
-                            key={`${sb._id}-${p._id}-pay`}
-                            className={`px-3 py-3 text-right font-medium ${
-                              !cell
-                                ? "text-gray-700"
-                                : cell.dividend === null
-                                ? "text-gray-500"
-                                : cell.dividend >= 0
-                                ? "text-green-400"
-                                : "text-red-400"
-                            }`}
-                          >
-                            {!cell
-                              ? "–"
-                              : cell.dividend === null
-                              ? "Pending"
-                              : `${cell.dividend >= 0 ? "+" : ""}${cell.dividend.toFixed(2)}`}
-                          </td>
-                        </>
-                      );
-                    })}
-                    <td
-                      className={`px-3 py-3 text-right font-bold ${
-                        totalFor(p._id) >= 0 ? "text-green-400" : "text-red-400"
-                      }`}
-                    >
-                      {totalFor(p._id) >= 0 ? "+" : ""}
-                      {totalFor(p._id).toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
 
         <form
           onSubmit={handleCreate}
@@ -242,7 +131,15 @@ export default function AdminSideBetsPage() {
               </div>
 
               {sb.correctAnswer ? (
-                <p className="text-xs font-semibold text-blue-400">Correct: {sb.correctAnswer} ✓</p>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs font-semibold text-blue-400">Correct: {sb.correctAnswer} ✓</p>
+                  <button
+                    onClick={() => handleDelete(sb._id, sb.label)}
+                    className="rounded-lg border border-red-800 px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10"
+                  >
+                    Delete
+                  </button>
+                </div>
               ) : (
                 <div className="flex gap-2">
                   <input
