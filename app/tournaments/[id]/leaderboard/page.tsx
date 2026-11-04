@@ -107,8 +107,9 @@ export default function TournamentLeaderboardPage() {
           for (const bet of bets) {
             const uid = bet.userId._id;
             if (bet.dividend !== null) {
-              // a win has a net value of 0 or more; a loss is always -stake
-              mainCells[uid] = { kind: "settled", value: bet.dividend, matchWon: bet.dividend >= 0 };
+              // Correct only if their pick matches the actual result. Judging by the
+              // payout alone would wrongly credit void bets, which also pay out 0.
+              mainCells[uid] = { kind: "settled", value: bet.dividend, matchWon: m.result === bet.choice };
             } else {
               mainCells[uid] = { kind: "pending" };
             }

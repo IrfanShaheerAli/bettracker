@@ -92,6 +92,8 @@ export default function MatchLedgerPage() {
   // A win shows the TOTAL you'd actually receive (your stake back + profit) —
   // not just the profit on its own, which was confusing to read at a glance.
   // A loss still shows -stake, since that's the real net result: you get nothing back.
+  // If nobody picked the outcome at all, there is no winner to pay, so the bet is
+  // void and the stake comes straight back.
   function dividendIf(bet: ApiBet, outcome: "A" | "draw" | "B") {
     if (settled) {
       // once settled, only the actual result column shows the real locked-in number
@@ -105,6 +107,8 @@ export default function MatchLedgerPage() {
       const profit = bet.stake * odds;
       return Number((bet.stake + profit).toFixed(2));
     }
+    // nobody backed this outcome (no odds exist for it): stakes would be returned
+    if (match!.odds[outcome] === null) return bet.stake;
     return -bet.stake;
   }
 
@@ -155,7 +159,7 @@ export default function MatchLedgerPage() {
           `Kickoff: ${new Date(m.kickoff).toLocaleString()} · Odds: ${m.odds.A ?? "–"} / ${m.odds.draw ?? "–"} / ${m.odds.B ?? "–"}`,
           settled
             ? `Final result: ${resultLabel}`
-            : "Projected payouts based on current stakes — final numbers lock in once the admin declares the result.",
+            : "Projected payouts based on current stakes — final numbers lock in once the admin declares the result. If nobody picked the outcome that happens, every stake is returned.",
           "A win shows the full amount received (stake + profit); a loss shows the stake lost.",
           `Exported on ${new Date().toLocaleString()}`,
         ],
@@ -299,7 +303,8 @@ export default function MatchLedgerPage() {
           {!settled && (
             <p className="mt-4 text-xs text-gray-500">
               These are projected payouts based on current stakes — final numbers lock in once
-              the admin declares the result.
+              the admin declares the result. If nobody picked the outcome that happens, every
+              stake is returned.
             </p>
           )}
         </div>

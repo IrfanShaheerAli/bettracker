@@ -62,8 +62,14 @@ export async function PATCH(
   const winners = answers.filter((a) => normalize(a.answer) === normalizedCorrect);
   const winnerPool = winners.length * sideBet.stake;
 
+  // If nobody guessed it, there is no winner to pay: the side bet is void,
+  // every stake is returned and nobody loses anything.
+  const nobodyWon = winners.length === 0;
+
   for (const a of answers) {
-    if (normalize(a.answer) === normalizedCorrect && winnerPool > 0) {
+    if (nobodyWon) {
+      a.dividend = 0;
+    } else if (normalize(a.answer) === normalizedCorrect && winnerPool > 0) {
       const odds = (totalPool - winnerPool) / winnerPool;
       a.dividend = Number((sideBet.stake * odds).toFixed(2));
     } else {

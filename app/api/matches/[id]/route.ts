@@ -61,12 +61,21 @@ export async function PATCH(
     match.status = "completed";
 
     const bets = await Bet.find({ matchId: id });
-    const { odds } = computePools(bets);
+    const { pools, odds } = computePools(bets);
+    const result = body.result as "A" | "draw" | "B";
+
+    // If nobody backed the outcome that happened, there is no winning side to pay.
+    // Every bet is void: stakes come back and nobody loses anything.
+    const nobodyPickedResult = pools[result] === 0;
 
     for (const bet of bets) {
-      const won = bet.choice === body.result;
-      const winOdds = odds[body.result as "A" | "draw" | "B"];
-      bet.dividend = won && winOdds !== null ? Number((bet.stake * winOdds).toFixed(2)) : -bet.stake;
+      if (nobodyPickedResult) {
+        bet.dividend = 0;
+      } else {
+        const won = bet.choice === result;
+        const winOdds = odds[result];
+        bet.dividend = won && winOdds !== null ? Number((bet.stake * winOdds).toFixed(2)) : -bet.stake;
+      }
       await bet.save();
     }
   }
