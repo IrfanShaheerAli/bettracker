@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { getSession } from "@/lib/session";
+import { downloadWorkbook, type ExportCell } from "@/lib/exportExcel";
 import { User } from "@/types";
 
 type ApiParticipant = { _id: string; name: string };
@@ -17,11 +18,38 @@ type ApiBet = {
   dividend: number | null;
 };
 type ApiPenalty = { userId: { _id: string }; amount: number };
+type SideEntry = { net: number; settled: number; pending: number };
 
-// value is always the NET profit/loss — used for ranking totals.
-// stake is kept alongside it only so the display can show the full payout
-// (stake + profit) for a win, without changing what counts toward the total.
-type Cell = { kind: "none" | "pending" | "penalty" | "settled"; value?: number; stake?: number };
+// One cell = one person's result for one match, with everything combined:
+//   value    = NET profit/loss from the match bet + all their side bets
+//              on that match (+ any penalty). The Total column adds these up.
+//   matchWon = true only when their main match prediction was correct.
+//              Kept separate so Accuracy still counts match predictions only,
+//              not side bets.
+type Cell = {
+  kind: "none" | "pending" | "penalty" | "settled";
+  value?: number;
+  matchWon?: boolean;
+};
+
+// Fold a person's side bet result into their match bet cell.
+function mergeCell(main: Cell, side?: SideEntry): Cell {
+  const mainCounts = main.kind === "settled" || main.kind === "penalty";
+  const sideCounts = !!side && side.settled > 0;
+
+  if (mainCounts || sideCounts) {
+    const net = (mainCounts ? main.value! : 0) + (sideCounts ? side!.net : 0);
+    return {
+      // still labelled "(pen)" only when the penalty is the whole story
+      kind: main.kind === "penalty" && !sideCounts ? "penalty" : "settled",
+      value: Math.round(net * 100) / 100,
+      matchWon: main.matchWon,
+    };
+  }
+
+  const anyPending = main.kind === "pending" || (!!side && side.pending > 0);
+  return anyPending ? { kind: "pending" } : { kind: "none" };
+}
 
 export default function TournamentLeaderboardPage() {
   const params = useParams();
@@ -34,6 +62,7 @@ export default function TournamentLeaderboardPage() {
   // grid[matchId][userId] = Cell
   const [grid, setGrid] = useState<Record<string, Record<string, Cell>>>({});
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const session = getSession();
@@ -59,6 +88,10 @@ export default function TournamentLeaderboardPage() {
 
       const newGrid: Record<string, Record<string, Cell>> = {};
 
+      // every person's side bet result per match, fetched in one request
+      const sideRes = await fetch(`/api/tournaments/${tournamentId}/sidebet-earnings`);
+      const sideEarnings: Record<string, Record<string, SideEntry>> = await sideRes.json();
+
       await Promise.all(
         mData.map(async (m) => {
           const [betsRes, matchRes] = await Promise.all([
@@ -68,20 +101,30 @@ export default function TournamentLeaderboardPage() {
           const bets: ApiBet[] = await betsRes.json();
           const matchDetail: { penalties: ApiPenalty[] } = await matchRes.json();
 
-          newGrid[m._id] = {};
+          // 1. the match bet result on its own
+          const mainCells: Record<string, Cell> = {};
 
           for (const bet of bets) {
             const uid = bet.userId._id;
             if (bet.dividend !== null) {
-              newGrid[m._id][uid] = { kind: "settled", value: bet.dividend, stake: bet.stake };
+              // a win has a net value of 0 or more; a loss is always -stake
+              mainCells[uid] = { kind: "settled", value: bet.dividend, matchWon: bet.dividend >= 0 };
             } else {
-              newGrid[m._id][uid] = { kind: "pending" };
+              mainCells[uid] = { kind: "pending" };
             }
           }
 
           for (const pen of matchDetail.penalties) {
-            const uid = pen.userId._id;
-            newGrid[m._id][uid] = { kind: "penalty", value: -pen.amount };
+            mainCells[pen.userId._id] = { kind: "penalty", value: -pen.amount };
+          }
+
+          // 2. combine it with their side bets on this match, for everyone in the tournament
+          newGrid[m._id] = {};
+          for (const p of tData.participantIds) {
+            newGrid[m._id][p._id] = mergeCell(
+              mainCells[p._id] ?? { kind: "none" },
+              sideEarnings[m._id]?.[p._id]
+            );
           }
         })
       );
@@ -105,13 +148,10 @@ export default function TournamentLeaderboardPage() {
 
     for (const m of matches) {
       const cell = cellFor(m._id, p._id);
-      if (cell.kind === "settled") {
-        total += cell.value!;
-        // a win has a net value of 0 or more; a loss is always -stake
-        if (cell.value! >= 0) accuracy++;
-      } else if (cell.kind === "penalty") {
-        total += cell.value!;
-      }
+      // each cell already combines the match bet, side bets and any penalty
+      if (cell.kind === "settled" || cell.kind === "penalty") total += cell.value!;
+      // Accuracy counts match predictions only, never side bets
+      if (cell.matchWon) accuracy++;
     }
 
     return { ...p, total, accuracy };
@@ -124,22 +164,69 @@ export default function TournamentLeaderboardPage() {
     if (cell.kind === "none") return <span className="text-gray-700">–</span>;
     if (cell.kind === "pending") return <span className="text-gray-500">Pending</span>;
 
-    const color = (cell.value ?? 0) >= 0 ? "text-green-400" : "text-red-400";
+    const value = cell.value ?? 0;
+    const color = value >= 0 ? "text-green-400" : "text-red-400";
 
     if (cell.kind === "penalty") {
-      return <span className={color}>{cell.value} (pen)</span>;
+      return <span className={color}>{value} (pen)</span>;
     }
 
-    // Winning bet: show the full payout (stake back + profit), not just the profit —
-    // matches what the person actually receives. A loss still shows the net -stake.
-    const isWin = (cell.value ?? 0) >= 0;
-    const displayValue = isWin && cell.stake !== undefined ? cell.stake + cell.value! : cell.value!;
-    const label = `${displayValue >= 0 ? "+" : ""}${displayValue.toFixed(2)}`;
-
-    return <span className={color}>{label}</span>;
+    // Net earnings for this match: match bet + side bets combined.
+    return (
+      <span className={color}>
+        {value >= 0 ? "+" : ""}
+        {value.toFixed(2)}
+      </span>
+    );
   }
 
   const isAdmin = user.role === "admin";
+
+  // Downloads exactly what the table shows as an Excel file.
+  async function handleExport() {
+    if (!isAdmin) return; // export is admin-only
+    const tournamentName = tournament!.name;
+    setExporting(true);
+    try {
+      const toExportCell = (cell: Cell): ExportCell => {
+        if (cell.kind === "none") return "–";
+        if (cell.kind === "pending") return "Pending";
+        const value = cell.value ?? 0;
+        if (cell.kind === "penalty") return { text: `${value} (pen)`, tone: "bad" };
+        return value;
+      };
+
+      await downloadWorkbook({
+        fileName: `${tournamentName} - Leaderboard`,
+        sheetName: "Leaderboard",
+        title: `${tournamentName} — Leaderboard`,
+        subtitleLines: [
+          `Exported on ${new Date().toLocaleString()}`,
+          "Each match column combines the match bet and any side bets. (pen) = penalty for not placing a bet.",
+        ],
+        headers: [
+          "Punter",
+          ...matches.map((m) => `${m.teamA} vs ${m.teamB}`),
+          "Total winnings/loss",
+          "Accuracy",
+          "Rank",
+        ],
+        rows: rows.map((r) => [
+          r.name,
+          ...matches.map((m) => toExportCell(cellFor(m._id, r._id))),
+          Math.round(r.total * 100) / 100,
+          r.accuracy,
+          rankOf(r._id),
+        ]),
+        // every match column, plus the Total column, holds money
+        moneyColumns: [...matches.map((_, i) => i + 1), matches.length + 1],
+      });
+    } catch {
+      alert("Could not create the Excel file. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <>
@@ -159,9 +246,21 @@ export default function TournamentLeaderboardPage() {
         )}
 
         <div className="relative mx-auto max-w-6xl">
-          <h1 className="mb-1 text-2xl font-bold text-white">{tournament.name} — Leaderboard</h1>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-2xl font-bold text-white">{tournament.name} — Leaderboard</h1>
+            {isAdmin && (
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="rounded-lg border border-green-500 px-4 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500/10 disabled:opacity-50"
+              >
+                {exporting ? "Preparing…" : "Export to Excel"}
+              </button>
+            )}
+          </div>
           <p className="mb-6 text-sm text-gray-400">
-            Match-by-match results, calculated live from every settled bet.
+            Match-by-match earnings, calculated live. Each match column combines the match bet
+            and any side bets on that match.
           </p>
 
           <div className="overflow-x-auto rounded-2xl border border-green-900 bg-[#0E231B]/90 backdrop-blur-sm">

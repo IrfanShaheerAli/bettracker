@@ -86,10 +86,16 @@ export default function AdminTournamentDetailPage() {
     e.preventDefault();
     if (!teamA.trim() || !teamB.trim() || !kickoff) return;
 
+    // The datetime box gives a time with no timezone (e.g. "2026-10-09T04:41").
+    // The server runs in UTC, so sent as-is it would be read as 04:41 UTC —
+    // which shows up as 10:11 AM in India. Converting here, in the browser,
+    // pins it to the admin's own timezone before it leaves.
+    const kickoffInstant = new Date(kickoff).toISOString();
+
     await fetch(`/api/tournaments/${tournamentId}/matches`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamA, teamB, kickoff }),
+      body: JSON.stringify({ teamA, teamB, kickoff: kickoffInstant }),
     });
 
     setTeamA("");

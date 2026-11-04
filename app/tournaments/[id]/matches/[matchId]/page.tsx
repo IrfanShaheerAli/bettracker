@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { getSession } from "@/lib/session";
+import { downloadWorkbook, type ExportCell } from "@/lib/exportExcel";
 import { User } from "@/types";
 
 type ApiMatch = {
@@ -34,6 +35,7 @@ export default function MatchLedgerPage() {
   const [match, setMatch] = useState<ApiMatch | null>(null);
   const [bets, setBets] = useState<ApiBet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const session = getSession();
@@ -115,6 +117,64 @@ export default function MatchLedgerPage() {
   const betUserIds = new Set(bets.map((b) => b.userId._id));
   const penaltiesForNonBettors = match.penalties.filter((p) => !betUserIds.has(p.userId._id));
 
+  // Downloads this match's ledger as an Excel file, mirroring the table on screen.
+  async function handleExport() {
+    if (!isAdmin) return; // export is admin-only
+    const m = match!;
+    const resultLabel = m.result === "A" ? m.teamA : m.result === "B" ? m.teamB : "Draw";
+    setExporting(true);
+    try {
+      // Before the result: what each person would get under each outcome.
+      // After the result: the one real payout per person.
+      const payoutHeaders = settled ? ["Payout"] : columns.map((c) => `If ${c.label} wins`);
+      const payoutCells = (b: ApiBet): ExportCell[] =>
+        settled
+          ? [dividendIf(b, m.result as "A" | "draw" | "B") ?? 0]
+          : columns.map((c) => dividendIf(b, c.key) ?? 0);
+
+      const betRows: ExportCell[][] = bets.map((b) => [
+        b.userId.name,
+        ...columns.map((c) => (b.choice === c.key ? b.stake : null)),
+        0,
+        ...payoutCells(b),
+      ]);
+
+      const noBetRows: ExportCell[][] = penaltiesForNonBettors.map((p) => [
+        `${p.userId.name} (no bet placed)`,
+        ...columns.map(() => "–"),
+        -p.amount,
+        ...payoutHeaders.map(() => "–"),
+      ]);
+
+      const penaltyCol = 1 + columns.length; // after Punter and the stake columns
+      await downloadWorkbook({
+        fileName: `${m.teamA} vs ${m.teamB} - Ledger`,
+        sheetName: "Ledger",
+        title: `${m.teamA} vs ${m.teamB}`,
+        subtitleLines: [
+          `Kickoff: ${new Date(m.kickoff).toLocaleString()} · Odds: ${m.odds.A ?? "–"} / ${m.odds.draw ?? "–"} / ${m.odds.B ?? "–"}`,
+          settled
+            ? `Final result: ${resultLabel}`
+            : "Projected payouts based on current stakes — final numbers lock in once the admin declares the result.",
+          "A win shows the full amount received (stake + profit); a loss shows the stake lost.",
+          `Exported on ${new Date().toLocaleString()}`,
+        ],
+        headers: [
+          "Punter",
+          ...columns.map((c) => `Stake (${c.label})`),
+          "Penalty",
+          ...payoutHeaders,
+        ],
+        rows: [...betRows, ...noBetRows],
+        moneyColumns: [penaltyCol, ...payoutHeaders.map((_, i) => penaltyCol + 1 + i)],
+      });
+    } catch {
+      alert("Could not create the Excel file. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <>
       <Navbar />
@@ -133,9 +193,20 @@ export default function MatchLedgerPage() {
         )}
 
         <div className="relative mx-auto max-w-4xl">
-          <h1 className="mb-1 text-2xl font-bold text-white">
-            {match.teamA} <span className="text-gray-500">vs</span> {match.teamB}
-          </h1>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-2xl font-bold text-white">
+              {match.teamA} <span className="text-gray-500">vs</span> {match.teamB}
+            </h1>
+            {isAdmin && (
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="rounded-lg border border-green-500 px-4 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500/10 disabled:opacity-50"
+              >
+                {exporting ? "Preparing…" : "Export to Excel"}
+              </button>
+            )}
+          </div>
           <p className="mb-1 text-sm text-gray-400">
             {new Date(match.kickoff).toLocaleString()} · Odds {match.odds.A ?? "—"} /{" "}
             {match.odds.draw ?? "—"} / {match.odds.B ?? "—"}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import TelegramConnect from "@/components/TelegramConnect";
 import { getSession } from "@/lib/session";
 import { User } from "@/types";
 
@@ -124,6 +125,8 @@ export default function TournamentsPage() {
                 You haven&apos;t joined a tournament yet — join one below to start predicting.
               </p>
             )}
+
+            <TelegramConnect userId={user.id} />
           </div>
         </div>
 
