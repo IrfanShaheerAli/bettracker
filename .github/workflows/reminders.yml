@@ -2,15 +2,15 @@ name: Betting reminders
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
-  workflow_dispatch:
+    - cron: "*/10 * * * *" # every 10 minutes
+  workflow_dispatch: # lets you run it by hand from the Actions tab
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger due reminders
+      - name: Ask the site to send any due reminders
         run: |
-          curl --fail --silent --show-error --max-time 60 
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" 
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             "${{ secrets.SITE_URL }}/api/cron/reminders"
